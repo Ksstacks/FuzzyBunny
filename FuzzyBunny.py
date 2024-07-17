@@ -1,6 +1,7 @@
 import argparse
 import requests
 import os
+from colorama import Fore,Back,Style
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -23,14 +24,14 @@ def test_url(url, output_file, found_urls):
         response = requests.get(url, timeout=3)
         status_code = response.status_code
         if status_code == 200 and url not in found_urls:
-            print(f"Valid URL found: {url} (Status Code: {status_code})")
+            print(f"Valid URL found: {url} (Status Code: " + Fore.GREEN + f"{status_code}" + Fore.WHITE + ")")
             found_urls.add(url)
             if output_file:
                 with open(output_file, 'a') as f:
                     f.write(f"{url} (Status Code: {status_code})\n")
             return True
         elif status_code != 404 and url not in found_urls:
-            print(f"URL: {url} (Status Code: {status_code})")
+            print(f"URL: {url} (Status Code: " + Fore.Blue + f"{status_code}" + Fore.WHITE + ")")
             found_urls.add(url)
     except requests.RequestException:
         pass
@@ -81,8 +82,8 @@ def main():
     parser.add_argument('-s', '--subdomains', help='Path to the subdomains wordlist.')
     parser.add_argument('-d', '--directories', help='Path to the directories wordlist.')
     parser.add_argument('-e', '--extensions', help='Path to the extensions wordlist.')
-    parser.add_argument('-o', '--domains', help='Path to the domains wordlist.')
-    parser.add_argument('-f', '--output', help='File to save the valid URLs.')
+    parser.add_argument('-w', '--domains', help='Path to the domains wordlist.')
+    parser.add_argument('-o', '--output', help='File to save the valid URLs.')
     parser.add_argument('-r', '--recursive', type=int, default=1, help='Depth of recursive search (default: 1).')
 
     args = parser.parse_args()
