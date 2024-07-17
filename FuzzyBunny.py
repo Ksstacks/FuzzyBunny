@@ -31,7 +31,7 @@ def test_url(url, output_file, found_urls):
                     f.write(f"{url} (Status Code: {status_code})\n")
             return True
         elif status_code != 404 and url not in found_urls:
-            print(f"URL: {url} (Status Code: " + Fore.Blue + f"{status_code}" + Fore.WHITE + ")")
+            print(f"URL: {url} (Status Code: " + Fore.BLUE + f"{status_code}" + Fore.WHITE + ")")
             found_urls.add(url)
     except requests.RequestException:
         pass
