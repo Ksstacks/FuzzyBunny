@@ -1,7 +1,7 @@
 # FuzzyBunny
 A url fuzzer that will search recursively to find directorys and can be used to fuzz subdomains too.
 
-![fuzzybunny](https://github.com/user-attachments/assets/ac440e4b-877d-4d11-830e-14879e8dbdb9)
+![fuzzybunny](https://github.com/user-attachments/assets/5b9dd99b-014b-4425-a64f-51bc349d23f3)
 
 License agreement: The user is allowed to do whatever they want with the code. I'm not responsible for the destruction it causes or misuse of the program. I’m also not responsible for any laws that this code breaks as it is legal to use as written. This code is for educational purposes only.
 
