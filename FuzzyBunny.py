@@ -19,9 +19,9 @@ def read_wordlist(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file.readlines()]
 
-def test_url(url, output_file, found_urls):
+def test_url(url, output_file, found_urls, proxies=None):
     try:
-        response = requests.get(url, timeout=3)
+        response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code == 200 and url not in found_urls:
             print(f"Valid URL found: {url} (Status Code: " + Fore.GREEN + f"{status_code}" + Fore.WHITE + ")")
@@ -37,7 +37,7 @@ def test_url(url, output_file, found_urls):
         pass
     return False
 
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1):
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, proxies=None):
     for domain in domains:
         for subdomain in subdomains:
             for directory in directories:
@@ -48,8 +48,8 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                     else:
                         url = f"http://{subdomain}.{domain}/{directory}/index.{extension}"
 
-                    if test_url(url, output_file, found_urls) and depth > 0:
-                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1)
+                    if test_url(url, output_file, found_urls, proxies) and depth > 0:
+                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1, proxies)
 
                     # Additional test without www
                     if subdomain == 'www':
@@ -57,16 +57,16 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                             url = f"http://{base_url}/{directory}/index.{extension}"
                         else:
                             url = f"http://{domain}/{directory}/index.{extension}"
-                        if test_url(url, output_file, found_urls) and depth > 0:
-                            fuzz_urls(subdomains, directories, extensions, [domain], output_file, found_urls, base_url, depth-1)
+                        if test_url(url, output_file, found_urls, proxies) and depth > 0:
+                            fuzz_urls(subdomains, directories, extensions, [domain], output_file, found_urls, base_url, depth-1, proxies)
 
                     # Additional test for just subdomain
                     if base_url:
                         url = f"http://{subdomain}.{base_url}/{directory}"
                     else:
                         url = f"http://{subdomain}.{domain}/{directory}"
-                    if test_url(url, output_file, found_urls) and depth > 0:
-                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1)
+                    if test_url(url, output_file, found_urls, proxies) and depth > 0:
+                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1, proxies)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -85,6 +85,7 @@ def main():
     parser.add_argument('-w', '--domains', help='Path to the domains wordlist.')
     parser.add_argument('-o', '--output', help='File to save the valid URLs.')
     parser.add_argument('-r', '--recursive', type=int, default=1, help='Depth of recursive search (default: 1).')
+    parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port).')
 
     args = parser.parse_args()
 
@@ -98,12 +99,15 @@ def main():
     output_file = args.output
     base_url = args.url
     recursive_depth = args.recursive
+    proxy = args.proxy
+
+    proxies = {'http': proxy, 'https': proxy} if proxy else None
 
     if output_file and os.path.exists(output_file):
         os.remove(output_file)
 
     found_urls = set()
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, recursive_depth)
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, recursive_depth, proxies)
 
 if __name__ == "__main__":
     main()
