@@ -85,7 +85,7 @@ def main():
     parser.add_argument('-w', '--domains', help='Path to the domains wordlist.')
     parser.add_argument('-o', '--output', help='File to save the valid URLs.')
     parser.add_argument('-r', '--recursive', type=int, default=1, help='Depth of recursive search (default: 1).')
-    parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port).')
+    parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port or socks5://proxy_ip:proxy_port).')
 
     args = parser.parse_args()
 
