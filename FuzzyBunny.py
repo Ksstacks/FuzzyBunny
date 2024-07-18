@@ -2,6 +2,7 @@ import argparse
 import requests
 import os
 from colorama import Fore, Back, Style
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -37,7 +38,13 @@ def test_url(url, output_file, found_urls, proxies=None):
         pass
     return False
 
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, proxies=None):
+def fuzz_url(url, output_file, found_urls, proxies=None, depth=0, max_depth=1):
+    if test_url(url, output_file, found_urls, proxies) and depth < max_depth:
+        return url
+    return None
+
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, proxies=None, max_workers=10):
+    urls_to_fuzz = []
     for domain in domains:
         for subdomain in subdomains:
             for directory in directories:
@@ -47,9 +54,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                         url = f"http://{subdomain}.{base_url}/{directory}/index.{extension}"
                     else:
                         url = f"http://{subdomain}.{domain}/{directory}/index.{extension}"
-
-                    if test_url(url, output_file, found_urls, proxies) and depth > 0:
-                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1, proxies)
+                    urls_to_fuzz.append((url, depth))
 
                     # Additional test without www
                     if subdomain == 'www':
@@ -57,16 +62,22 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                             url = f"http://{base_url}/{directory}/index.{extension}"
                         else:
                             url = f"http://{domain}/{directory}/index.{extension}"
-                        if test_url(url, output_file, found_urls, proxies) and depth > 0:
-                            fuzz_urls(subdomains, directories, extensions, [domain], output_file, found_urls, base_url, depth-1, proxies)
+                        urls_to_fuzz.append((url, depth))
 
                     # Additional test for just subdomain
                     if base_url:
                         url = f"http://{subdomain}.{base_url}/{directory}"
                     else:
                         url = f"http://{subdomain}.{domain}/{directory}"
-                    if test_url(url, output_file, found_urls, proxies) and depth > 0:
-                        fuzz_urls(subdomains, directories, extensions, [f"{subdomain}.{domain}"], output_file, found_urls, base_url, depth-1, proxies)
+                    urls_to_fuzz.append((url, depth))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fuzz_url, url, output_file, found_urls, proxies, d, depth): url for url, d in urls_to_fuzz}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                subdomains.append(result.split('/')[2].split('.')[0])
+                fuzz_urls(subdomains, directories, extensions, [result.split('/')[2]], output_file, found_urls, base_url, depth - 1, proxies, max_workers)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -86,6 +97,7 @@ def main():
     parser.add_argument('-o', '--output', help='File to save the valid URLs.')
     parser.add_argument('-r', '--recursive', type=int, default=1, help='Depth of recursive search (default: 1).')
     parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port or socks5://proxy_ip:proxy_port).')
+    parser.add_argument('-t', '--threads', type=int, default=10, help='Number of concurrent threads (default: 10).')
 
     args = parser.parse_args()
 
@@ -100,6 +112,7 @@ def main():
     base_url = args.url
     recursive_depth = args.recursive
     proxy = args.proxy
+    threads = args.threads
 
     proxies = {'http': proxy, 'https': proxy} if proxy else None
 
@@ -107,7 +120,7 @@ def main():
         os.remove(output_file)
 
     found_urls = set()
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, recursive_depth, proxies)
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, recursive_depth, proxies, threads)
 
 if __name__ == "__main__":
     main()
