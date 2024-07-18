@@ -1,7 +1,7 @@
 import argparse
 import requests
 import os
-from colorama import Fore,Back,Style
+from colorama import Fore, Back, Style
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
