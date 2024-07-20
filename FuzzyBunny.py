@@ -1,8 +1,10 @@
 import argparse
 import requests
 import os
-from colorama import Fore, Back, Style
+import threading
+from colorama import Fore, Style
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -20,7 +22,7 @@ def read_wordlist(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file.readlines()]
 
-def test_url(url, output_file, found_urls, proxies=None):
+def test_url(url, output_file, found_urls, proxies=None, semaphore=None):
     try:
         response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
@@ -36,55 +38,50 @@ def test_url(url, output_file, found_urls, proxies=None):
             found_urls.add(url)
     except requests.RequestException:
         pass
+    finally:
+        if semaphore:
+            semaphore.release()
     return False
 
-def fuzz_url(url, output_file, found_urls, proxies=None, depth=0, max_depth=1, subdomains=None, directories=None, extensions=None, domains=None):
-    if test_url(url, output_file, found_urls, proxies) and depth < max_depth:
-        # If a valid directory is found, continue fuzzing inside this directory
-        base_url = url.rstrip('/')
-        new_subdomains = subdomains if subdomains else ['']
-        new_directories = directories if directories else ['']
-        new_extensions = extensions if extensions else ['']
-        new_domains = domains if domains else ['']
-        fuzz_urls(new_subdomains, new_directories, new_extensions, new_domains, output_file, found_urls, base_url, depth + 1, proxies, max_workers=10)
-        return url
-    return None
-
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, proxies=None, max_workers=10):
-    urls_to_fuzz = []
-    for domain in domains:
-        for subdomain in subdomains:
-            for directory in directories:
-                for extension in extensions:
-                    # Construct URLs
-                    if base_url:
-                        url = f"http://{subdomain}.{base_url}/{directory}/index.{extension}"
-                    else:
-                        url = f"http://{subdomain}.{domain}/{directory}/index.{extension}"
-                    urls_to_fuzz.append((url, depth))
-
-                    # Additional test without www
-                    if subdomain == 'www':
-                        if base_url:
-                            url = f"http://{base_url}/{directory}/index.{extension}"
-                        else:
-                            url = f"http://{domain}/{directory}/index.{extension}"
-                        urls_to_fuzz.append((url, depth))
-
-                    # Additional test for just subdomain
-                    if base_url:
-                        url = f"http://{subdomain}.{base_url}/{directory}"
-                    else:
-                        url = f"http://{subdomain}.{domain}/{directory}"
-                    urls_to_fuzz.append((url, depth))
-
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, max_depth=1, proxies=None, max_workers=10):
+    semaphore = threading.Semaphore(max_workers)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(fuzz_url, url, output_file, found_urls, proxies, d, depth, subdomains, directories, extensions, domains): url for url, d in urls_to_fuzz}
+        futures = []
+        for domain in domains:
+            for subdomain in subdomains:
+                for directory in directories:
+                    for extension in extensions:
+                        # Construct URLs
+                        if base_url:
+                            url = urljoin(f"http://{subdomain}.{base_url}/", f"{directory}/index.{extension}")
+                        else:
+                            url = urljoin(f"http://{subdomain}.{domain}/", f"{directory}/index.{extension}")
+
+                        semaphore.acquire()
+                        futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
+
+                        # Additional test without www
+                        if subdomain == 'www':
+                            if base_url:
+                                url = urljoin(f"http://{base_url}/", f"{directory}/index.{extension}")
+                            else:
+                                url = urljoin(f"http://{domain}/", f"{directory}/index.{extension}")
+                            semaphore.acquire()
+                            futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
+
+                        # Additional test for just subdomain
+                        if base_url:
+                            url = urljoin(f"http://{subdomain}.{base_url}/", f"{directory}")
+                        else:
+                            url = urljoin(f"http://{subdomain}.{domain}/", f"{directory}")
+                        semaphore.acquire()
+                        futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
+
         for future in as_completed(futures):
             result = future.result()
-            if result:
-                subdomains.append(result.split('/')[2].split('.')[0])
-                fuzz_urls(subdomains, directories, extensions, [result.split('/')[2]], output_file, found_urls, base_url, depth - 1, proxies, max_workers)
+            if result and depth < max_depth:
+                new_base_url = result.rstrip('/')
+                fuzz_urls(subdomains, directories, extensions, [new_base_url], output_file, found_urls, new_base_url, depth + 1, max_depth, proxies, max_workers)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -127,7 +124,7 @@ def main():
         os.remove(output_file)
 
     found_urls = set()
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, recursive_depth, proxies, threads)
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, 1, recursive_depth, proxies, threads)
 
 if __name__ == "__main__":
     main()
