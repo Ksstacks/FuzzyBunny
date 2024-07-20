@@ -38,8 +38,15 @@ def test_url(url, output_file, found_urls, proxies=None):
         pass
     return False
 
-def fuzz_url(url, output_file, found_urls, proxies=None, depth=0, max_depth=1):
+def fuzz_url(url, output_file, found_urls, proxies=None, depth=0, max_depth=1, subdomains=None, directories=None, extensions=None, domains=None):
     if test_url(url, output_file, found_urls, proxies) and depth < max_depth:
+        # If a valid directory is found, continue fuzzing inside this directory
+        base_url = url.rstrip('/')
+        new_subdomains = subdomains if subdomains else ['']
+        new_directories = directories if directories else ['']
+        new_extensions = extensions if extensions else ['']
+        new_domains = domains if domains else ['']
+        fuzz_urls(new_subdomains, new_directories, new_extensions, new_domains, output_file, found_urls, base_url, depth + 1, proxies, max_workers=10)
         return url
     return None
 
@@ -72,7 +79,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                     urls_to_fuzz.append((url, depth))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(fuzz_url, url, output_file, found_urls, proxies, d, depth): url for url, d in urls_to_fuzz}
+        futures = {executor.submit(fuzz_url, url, output_file, found_urls, proxies, d, depth, subdomains, directories, extensions, domains): url for url, d in urls_to_fuzz}
         for future in as_completed(futures):
             result = future.result()
             if result:
