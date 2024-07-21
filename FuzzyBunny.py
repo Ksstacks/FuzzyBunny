@@ -37,7 +37,7 @@ def test_url(url, output_file, found_urls, proxies=None):
             return result
         elif status_code != 404 and url not in found_urls:
             found_urls.add(url)
-            return f"{Fore.BLUE}URL: {url} (Status Code: {status_code}){Style.RESET_ALL}"
+            return f"{Fore.RED}URL: {url} (Status Code: {status_code}){Style.RESET_ALL}"
     except requests.RequestException:
         pass
     return None
@@ -103,7 +103,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             url = futures[future]
             result = future.result()
             # Clear the previous fuzzing URL line
-            sys.stdout.write("\r" + " " * 80 + "\r")
+            sys.stdout.write("\r" + " " * 100 + "\r")
             sys.stdout.flush()
             if result:
                 print(result)
@@ -114,6 +114,22 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             if depth < max_depth and result:
                 new_base_url = url.rstrip('/')
                 fuzz_urls(subdomains, directories, extensions, [new_base_url], output_file, found_urls, new_base_url, depth + 1, max_depth, proxies, max_workers)
+
+def fuzz_subdomains(base_url, wordlist, output_file, found_urls, proxies=None, max_workers=10):
+    subdomains = read_wordlist(wordlist)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(test_url, f"http://{subdomain}.{base_url}", output_file, found_urls, proxies): subdomain for subdomain in subdomains}
+        for future in as_completed(futures):
+            subdomain = futures[future]
+            result = future.result()
+            # Clear the previous fuzzing URL line
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            sys.stdout.flush()
+            if result:
+                print(result)
+            # Display current fuzzing URL
+            sys.stdout.write(f"\r{Fore.YELLOW}Fuzzing Subdomain: {subdomain}.{base_url} {Style.RESET_ALL}")
+            sys.stdout.flush()
 
 def main():
     parser = argparse.ArgumentParser(
@@ -156,6 +172,10 @@ def main():
         os.remove(output_file)
 
     found_urls = set()
+    
+    if args.subdomains:
+        fuzz_subdomains(base_url, args.subdomains, output_file, found_urls, proxies, threads)
+    
     fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, 1, recursive_depth, proxies, threads)
 
 if __name__ == "__main__":
