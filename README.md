@@ -8,4 +8,4 @@ License agreement: The user is allowed to do whatever they want with the code. I
 
 FuzzyBunny is a url fuzzer that you can use to find directories and fuzz for subdomians too! Along with having a way to output your findings to a file. You will also be able to use extentions to seach for files within a website. Have fun Fuzzing!
 
-[FuzzyBunny.webm](https://github.com/user-attachments/assets/d9ec4594-2d33-46bb-b76f-fa91713a1f43)
+[fuzzy.webm](https://github.com/user-attachments/assets/39b0acc1-4261-46b3-bcfc-1cec6f62e3e6)

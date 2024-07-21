@@ -1,10 +1,12 @@
 import argparse
 import requests
 import os
-import threading
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urljoin
+import sys
+
+# Initialize colorama
+init(autoreset=True)
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -22,65 +24,95 @@ def read_wordlist(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file.readlines()]
 
-def test_url(url, output_file, found_urls, proxies=None, semaphore=None):
+def test_url(url, output_file, found_urls, proxies=None):
     try:
         response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code == 200 and url not in found_urls:
-            print(f"Valid URL found: {url} (Status Code: " + Fore.GREEN + f"{status_code}" + Fore.WHITE + ")")
             found_urls.add(url)
+            result = f"{Fore.GREEN}Valid URL found: {url} (Status Code: {status_code}){Style.RESET_ALL}"
             if output_file:
                 with open(output_file, 'a') as f:
                     f.write(f"{url} (Status Code: {status_code})\n")
-            return True
+            return result
         elif status_code != 404 and url not in found_urls:
-            print(f"URL: {url} (Status Code: " + Fore.BLUE + f"{status_code}" + Fore.WHITE + ")")
             found_urls.add(url)
+            return f"{Fore.BLUE}URL: {url} (Status Code: {status_code}){Style.RESET_ALL}"
     except requests.RequestException:
         pass
-    finally:
-        if semaphore:
-            semaphore.release()
-    return False
+    return None
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, max_depth=1, proxies=None, max_workers=10):
-    semaphore = threading.Semaphore(max_workers)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
+    urls_to_fuzz = []
+
+    if directories:
         for domain in domains:
             for subdomain in subdomains:
                 for directory in directories:
-                    for extension in extensions:
-                        # Construct URLs
-                        if base_url:
-                            url = urljoin(f"http://{subdomain}.{base_url}/", f"{directory}/index.{extension}")
-                        else:
-                            url = urljoin(f"http://{subdomain}.{domain}/", f"{directory}/index.{extension}")
-
-                        semaphore.acquire()
-                        futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
-
-                        # Additional test without www
+                    if extensions:
+                        for extension in extensions:
+                            url = f"http://{subdomain}.{base_url}/{directory}.{extension}" if base_url else f"http://{subdomain}.{domain}/{directory}.{extension}"
+                            urls_to_fuzz.append(url)
+                            if subdomain == 'www':
+                                url = f"http://{base_url}/{directory}.{extension}" if base_url else f"http://{domain}/{directory}.{extension}"
+                                urls_to_fuzz.append(url)
+                            url = f"http://{subdomain}.{base_url}/{directory}" if base_url else f"http://{subdomain}.{domain}/{directory}"
+                            urls_to_fuzz.append(url)
+                    else:
+                        url = f"http://{subdomain}.{base_url}/{directory}" if base_url else f"http://{subdomain}.{domain}/{directory}"
+                        urls_to_fuzz.append(url)
                         if subdomain == 'www':
-                            if base_url:
-                                url = urljoin(f"http://{base_url}/", f"{directory}/index.{extension}")
-                            else:
-                                url = urljoin(f"http://{domain}/", f"{directory}/index.{extension}")
-                            semaphore.acquire()
-                            futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
+                            url = f"http://{base_url}/{directory}" if base_url else f"http://{domain}/{directory}"
+                            urls_to_fuzz.append(url)
+                        url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
+                        urls_to_fuzz.append(url)
+    elif subdomains:
+        for domain in domains:
+            for subdomain in subdomains:
+                if extensions:
+                    for extension in extensions:
+                        url = f"http://{subdomain}.{base_url}.{extension}" if base_url else f"http://{subdomain}.{domain}.{extension}"
+                        urls_to_fuzz.append(url)
+                        if subdomain == 'www':
+                            url = f"http://{base_url}.{extension}" if base_url else f"http://{domain}.{extension}"
+                            urls_to_fuzz.append(url)
+                        url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
+                        urls_to_fuzz.append(url)
+                else:
+                    url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
+                    urls_to_fuzz.append(url)
+                    if subdomain == 'www':
+                        url = f"http://{base_url}" if base_url else f"http://{domain}"
+                        urls_to_fuzz.append(url)
+    elif extensions:
+        for domain in domains:
+            for extension in extensions:
+                url = f"http://{domain}.{extension}"
+                urls_to_fuzz.append(url)
+                if domain == 'www':
+                    url = f"http://{extension}"
+                    urls_to_fuzz.append(url)
+    else:
+        for domain in domains:
+            url = f"http://{domain}"
+            urls_to_fuzz.append(url)
 
-                        # Additional test for just subdomain
-                        if base_url:
-                            url = urljoin(f"http://{subdomain}.{base_url}/", f"{directory}")
-                        else:
-                            url = urljoin(f"http://{subdomain}.{domain}/", f"{directory}")
-                        semaphore.acquire()
-                        futures.append(executor.submit(test_url, url, output_file, found_urls, proxies, semaphore))
-
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(test_url, url, output_file, found_urls, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
+            url = futures[future]
             result = future.result()
-            if result and depth < max_depth:
-                new_base_url = result.rstrip('/')
+            # Clear the previous fuzzing URL line
+            sys.stdout.write("\r" + " " * 80 + "\r")
+            sys.stdout.flush()
+            if result:
+                print(result)
+            # Display current fuzzing URL
+            sys.stdout.write(f"\r{Fore.YELLOW}Fuzzing URL: {url} {Style.RESET_ALL}")
+            sys.stdout.flush()
+            # If a valid directory is found, continue fuzzing inside this directory
+            if depth < max_depth and result:
+                new_base_url = url.rstrip('/')
                 fuzz_urls(subdomains, directories, extensions, [new_base_url], output_file, found_urls, new_base_url, depth + 1, max_depth, proxies, max_workers)
 
 def main():
@@ -105,12 +137,12 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.subdomains and not args.directories:
-        parser.error("Either --subdomains or --directories must be specified.")
+    if not args.subdomains and not args.directories and not args.extensions:
+        parser.error("At least one of --subdomains, --directories, or --extensions must be specified.")
 
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ['www']
-    directories = read_wordlist(args.directories) if args.directories else ['']
-    extensions = read_wordlist(args.extensions) if args.extensions else ['']
+    directories = read_wordlist(args.directories) if args.directories else None
+    extensions = read_wordlist(args.extensions) if args.extensions else None
     domains = read_wordlist(args.domains) if args.domains else [args.url]
     output_file = args.output
     base_url = args.url
