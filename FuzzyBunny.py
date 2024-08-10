@@ -26,18 +26,19 @@ def read_wordlist(file_path):
 
 def test_url(url, output_file, found_urls, proxies=None):
     try:
-        response = requests.get(url, timeout=3, proxies=proxies)
+        response = requests.get(url, timeout=3, proxies=proxies, allow_redirects=True)
+        final_url = response.url
         status_code = response.status_code
         if status_code == 200 and url not in found_urls:
             found_urls.add(url)
-            result = f"{Fore.GREEN}Valid URL found: {url} (Status Code: {status_code}){Style.RESET_ALL}"
+            result = f"Valid URL found: {url} (Status Code: {Fore.GREEN}{status_code}{Fore.WHITE}){Style.RESET_ALL}"
             if output_file:
                 with open(output_file, 'a') as f:
                     f.write(f"{url} (Status Code: {status_code})\n")
             return result
         elif status_code != 404 and url not in found_urls:
             found_urls.add(url)
-            return f"{Fore.RED}URL: {url} (Status Code: {status_code}){Style.RESET_ALL}"
+            return f"URL: {url} (Status Code: {Fore.RED}{status_code}{Fore.WHITE}){Style.RESET_ALL}"
     except requests.RequestException:
         pass
     return None
@@ -45,57 +46,56 @@ def test_url(url, output_file, found_urls, proxies=None):
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=None, depth=1, max_depth=1, proxies=None, max_workers=10):
     urls_to_fuzz = []
 
+    def construct_url(subdomain, domain, directory=None, extension=None):
+        # Determine the base URL, checking if it's already a full URL or needs "http://" prepended
+        if "http://" in domain or "https://" in domain:
+            base = domain
+        else:
+            base = f"http://{subdomain}.{domain}" if subdomain else f"http://{domain}"
+
+        if directory and extension:
+            return f"{base}/{directory}.{extension}"
+        elif directory:
+            return f"{base}/{directory}"
+        return base
+
     if directories:
         for domain in domains:
             for subdomain in subdomains:
                 for directory in directories:
                     if extensions:
                         for extension in extensions:
-                            url = f"http://{subdomain}.{base_url}/{directory}.{extension}" if base_url else f"http://{subdomain}.{domain}/{directory}.{extension}"
-                            urls_to_fuzz.append(url)
+                            urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain, directory, extension))
                             if subdomain == 'www':
-                                url = f"http://{base_url}/{directory}.{extension}" if base_url else f"http://{domain}/{directory}.{extension}"
-                                urls_to_fuzz.append(url)
-                            url = f"http://{subdomain}.{base_url}/{directory}" if base_url else f"http://{subdomain}.{domain}/{directory}"
-                            urls_to_fuzz.append(url)
+                                urls_to_fuzz.append(construct_url(None, base_url if base_url else domain, directory, extension))
+                            urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain, directory))
                     else:
-                        url = f"http://{subdomain}.{base_url}/{directory}" if base_url else f"http://{subdomain}.{domain}/{directory}"
-                        urls_to_fuzz.append(url)
+                        urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain, directory))
                         if subdomain == 'www':
-                            url = f"http://{base_url}/{directory}" if base_url else f"http://{domain}/{directory}"
-                            urls_to_fuzz.append(url)
-                        url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
-                        urls_to_fuzz.append(url)
+                            urls_to_fuzz.append(construct_url(None, base_url if base_url else domain, directory))
+                        urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain))
     elif subdomains:
         for domain in domains:
             for subdomain in subdomains:
                 if extensions:
                     for extension in extensions:
-                        url = f"http://{subdomain}.{base_url}.{extension}" if base_url else f"http://{subdomain}.{domain}.{extension}"
-                        urls_to_fuzz.append(url)
+                        urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain, None, extension))
                         if subdomain == 'www':
-                            url = f"http://{base_url}.{extension}" if base_url else f"http://{domain}.{extension}"
-                            urls_to_fuzz.append(url)
-                        url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
-                        urls_to_fuzz.append(url)
+                            urls_to_fuzz.append(construct_url(None, base_url if base_url else domain, None, extension))
+                        urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain))
                 else:
-                    url = f"http://{subdomain}.{base_url}" if base_url else f"http://{subdomain}.{domain}"
-                    urls_to_fuzz.append(url)
+                    urls_to_fuzz.append(construct_url(subdomain, base_url if base_url else domain))
                     if subdomain == 'www':
-                        url = f"http://{base_url}" if base_url else f"http://{domain}"
-                        urls_to_fuzz.append(url)
+                        urls_to_fuzz.append(construct_url(None, base_url if base_url else domain))
     elif extensions:
         for domain in domains:
             for extension in extensions:
-                url = f"http://{domain}.{extension}"
-                urls_to_fuzz.append(url)
+                urls_to_fuzz.append(construct_url(None, domain, None, extension))
                 if domain == 'www':
-                    url = f"http://{extension}"
-                    urls_to_fuzz.append(url)
+                    urls_to_fuzz.append(construct_url(None, extension))
     else:
         for domain in domains:
-            url = f"http://{domain}"
-            urls_to_fuzz.append(url)
+            urls_to_fuzz.append(construct_url(None, domain))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(test_url, url, output_file, found_urls, proxies): url for url in urls_to_fuzz}
@@ -113,6 +113,19 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             # If a valid directory is found, continue fuzzing inside this directory
             if depth < max_depth and result:
                 new_base_url = url.rstrip('/')
+                # Ensure there's only one "http://" or "https://" in the URL
+                if new_base_url.startswith('http://http://') or new_base_url.startswith('https://https://'):
+                    new_base_url = new_base_url.replace('http://http://', 'http://').replace('https://https://', 'https://')
+                
+                # Check if the URL redirects to itself, skip if it does
+                try:
+                    response = requests.get(new_base_url, timeout=3, proxies=proxies, allow_redirects=True)
+                    if response.url == new_base_url:
+                        print(f"\n{Fore.BLUE}Skipping recursive fuzzing for {new_base_url} as it redirects to itself.{Style.RESET_ALL}")
+                        continue
+                except requests.RequestException:
+                    continue
+                
                 fuzz_urls(subdomains, directories, extensions, [new_base_url], output_file, found_urls, new_base_url, depth + 1, max_depth, proxies, max_workers)
 
 def fuzz_subdomains(base_url, wordlist, output_file, found_urls, proxies=None, max_workers=10):
@@ -161,22 +174,11 @@ def main():
     extensions = read_wordlist(args.extensions) if args.extensions else None
     domains = read_wordlist(args.domains) if args.domains else [args.url]
     output_file = args.output
-    base_url = args.url
-    recursive_depth = args.recursive
-    proxy = args.proxy
-    threads = args.threads
-
-    proxies = {'http': proxy, 'https': proxy} if proxy else None
-
-    if output_file and os.path.exists(output_file):
-        os.remove(output_file)
+    proxies = {'http': args.proxy, 'https': args.proxy} if args.proxy else None
 
     found_urls = set()
-    
-    if args.subdomains:
-        fuzz_subdomains(base_url, args.subdomains, output_file, found_urls, proxies, threads)
-    
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url, 1, recursive_depth, proxies, threads)
+
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, base_url=args.url, max_depth=args.recursive, proxies=proxies, max_workers=args.threads)
 
 if __name__ == "__main__":
     main()
