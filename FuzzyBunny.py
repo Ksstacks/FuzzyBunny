@@ -67,7 +67,39 @@ def construct_url(subdomain, domain, directory=None, extension=None):
         return f"{domain}/{directory}"
     return domain
 
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url=None, depth=1, max_depth=1, proxies=None, max_workers=10):
+def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10):
+    if current_depth > max_depth:
+        print(f"Reached maximum recursive depth: {max_depth}")
+        return
+
+    urls_to_fuzz = []
+
+    if directories:
+        for directory in directories:
+            if extensions:
+                for extension in extensions:
+                    url = f"{base_url}/{directory}.{extension}"
+                    urls_to_fuzz.append(url)
+            else:
+                url = f"{base_url}/{directory}"
+                urls_to_fuzz.append(url)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
+        for future in as_completed(futures):
+            url = futures[future]
+            result = future.result()
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            sys.stdout.flush()
+            if result:
+                print(result)
+                # Skip further fuzzing if the URL redirects to the home page
+                if redirects_to_home_page(url, base_url, proxies):
+                    print(f"Skipping URL {url} as it redirects to the home page.")
+                    continue
+                fuzz_recursive(url.rstrip('/'), directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers)
+
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
     urls_to_fuzz = []
 
     if directories:
@@ -123,36 +155,30 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             urls_to_fuzz.append(url)
 
     home_url = base_url.rstrip('/')
+    found_directories = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
             result = future.result()
-            # Clear the previous fuzzing URL line
             sys.stdout.write("\r" + " " * 100 + "\r")
             sys.stdout.flush()
             if result:
                 print(result)
-            # Display current fuzzing URL
-            sys.stdout.write(f"\r{Fore.YELLOW}Fuzzing URL: {url} {Style.RESET_ALL}")
-            sys.stdout.flush()
+                if redirects_to_home_page(url, base_url, proxies):
+                    print(f"Skipping URL {url} as it redirects to the home page.")
+                    continue
+                if url not in found_directories:
+                    found_directories.append(url)
 
-            # If a valid directory is found
-            if result:
-                # Check if it redirects to the home page
-                if redirects_to_home_page(url, home_url, proxies):
-                    print(f"{Fore.YELLOW}Skipping URL {url} because it redirects to the home page.{Style.RESET_ALL}")
-                elif depth < max_depth:
-                    # Continue recursive fuzzing with the new base URL
-                    new_base_url = url.rstrip('/')
-                    fuzz_urls(subdomains, directories, extensions, [new_base_url], output_file, found_urls, excluded_codes, new_base_url, depth + 1, max_depth, proxies, max_workers)
+    # Process each found directory recursively
+    for directory in found_directories:
+        fuzz_recursive(directory, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fuzzer for enumeration and fuzzing with extensions and subdomains.\n\n"
-                    "Examples:\n"
-                    "  python fuzzer.py -u https://example.com -d directories.txt",
+        description="Fuzzer for enumeration and fuzzing with extensions and subdomains.",
         formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('-u', '--url', required=True, help='Base URL for fuzzing. Must start with http:// or https://.')
@@ -164,27 +190,23 @@ def main():
     parser.add_argument('-r', '--recursive', type=int, default=1, help='Depth of recursive search (default: 1).')
     parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port or socks5://proxy_ip:proxy_port).')
     parser.add_argument('-t', '--threads', type=int, default=10, help='Number of concurrent threads (default: 10).')
-    parser.add_argument('-x', '--exclude', nargs='+', type=int, help='HTTP status codes to exclude (e.g., 403 500).')
+    parser.add_argument('-x', '--exclude', nargs='*', default=[], help='Status codes to exclude from results (e.g., 404 500).')
 
     args = parser.parse_args()
 
-    # Check if URL starts with http:// or https://
-    if not (args.url.startswith('http://') or args.url.startswith('https://')):
+    if not args.url.startswith(('http://', 'https://')):
         parser.error("The URL must start with http:// or https://")
-
-    if not args.subdomains and not args.directories and not args.extensions:
-        parser.error("At least one of --subdomains, --directories, or --extensions must be specified.")
 
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ['www']
     directories = read_wordlist(args.directories) if args.directories else None
     extensions = read_wordlist(args.extensions) if args.extensions else None
     domains = read_wordlist(args.domains) if args.domains else [args.url]
     output_file = args.output
-    base_url = args.url
-    recursive_depth = args.recursive
+    base_url = args.url.rstrip('/')
+    max_depth = args.recursive
     proxy = args.proxy
     threads = args.threads
-    excluded_codes = set(args.exclude) if args.exclude else set()
+    excluded_codes = set(map(int, args.exclude)) if args.exclude else set()
 
     proxies = {'http': proxy, 'https': proxy} if proxy else None
 
@@ -193,7 +215,7 @@ def main():
 
     found_urls = set()
 
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth=recursive_depth, proxies=proxies, max_workers=threads)
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies, threads)
 
 if __name__ == "__main__":
     main()
