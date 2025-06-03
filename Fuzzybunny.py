@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import argparse
 import requests
 import sys,os
@@ -19,10 +20,6 @@ banner = """
   + telegram @ksstacks
 """
 print(banner)
-
-def signal_handler(sig, frame):
-    print(f"\nCaught signal {sig}. Exiting gracefully.")
-    sys.exit(0)
 
 def read_wordlist(file_path):
     with open(file_path, 'r') as file:
@@ -89,10 +86,11 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                 urls_to_fuzz.append(url)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        home_page_content = subprocess.run(f"curl -s {base_url}", shell=True, text=True).stdout
+        home_page_content = subprocess.run(f"curl -s {base_url}").stdout
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
-            url = futures[future] 
+            url = futures[future]
+            curled = subprocess.run(f"curl -s {url}")
             if curled.strip() == home_page_content.strip():
                 print(f"Skipping URL {url} as it redirects to the home page.")
                 continue
@@ -168,18 +166,13 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                     continue
                 if url not in found_directories:
                     found_directories.append(url)
-
-    # Process each found directory recursively
     for directory in found_directories:
         fuzz_recursive(directory, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
 def main():
     parser = argparse.ArgumentParser(
         description="Fuzzer for enumeration and fuzzing with extensions and subdomains.",
         formatter_class=argparse.RawTextHelpFormatter)
-
     parser.add_argument('-u', '--url', required=True, help='Base URL for fuzzing. Must start with http:// or https://.')
     parser.add_argument('-s', '--subdomains', help='Path to the subdomains wordlist.')
     parser.add_argument('-d', '--directories', help='Path to the directories wordlist.')
@@ -190,12 +183,10 @@ def main():
     parser.add_argument('-p', '--proxy', help='Proxy URL (format: http://proxy_ip:proxy_port or socks5://proxy_ip:proxy_port).')
     parser.add_argument('-t', '--threads', type=int, default=10, help='Number of concurrent threads (default: 10).')
     parser.add_argument('-x', '--exclude', nargs='*', default=[], help='Status codes to exclude from results (e.g., 404 500).')
-
     args = parser.parse_args()
 
     if not args.url.startswith(('http://', 'https://')):
         parser.error("The URL must start with http:// or https://")
-
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ['www']
     directories = read_wordlist(args.directories) if args.directories else None
     extensions = read_wordlist(args.extensions) if args.extensions else None
@@ -206,9 +197,7 @@ def main():
     proxy = args.proxy
     threads = args.threads
     excluded_codes = set(map(int, args.exclude)) if args.exclude else set()
-
-    proxies = {'http': proxy, 'https': proxy} if proxy else None
-
+    proxies = {'http': proxy, 'https': proxy, 'socks5': proxy} if proxy else None
     if output_file and os.path.exists(output_file):
         os.remove(output_file)
 
