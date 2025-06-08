@@ -5,9 +5,11 @@ import sys,os
 import subprocess
 from colorama import Fore, Style, init
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import shutil
 
 # Initialize colorama
 init(autoreset=True)
+term_width = shutil.get_terminal_size((80, 20)).columns
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -21,6 +23,7 @@ banner = """
 """
 print(banner)
 
+
 def read_wordlist(file_path):
     with open(file_path, 'r') as file:
         return [line.strip() for line in file.readlines()]
@@ -31,7 +34,6 @@ def test_url(url, output_file, found_urls, excluded_codes, proxies=None):
         status_code = response.status_code
         if status_code in excluded_codes:
             return None
-
         if status_code == 200 and url not in found_urls:
             found_urls.add(url)
             result = f"Valid URL found: {url} (Status Code: {status_code})"
@@ -97,6 +99,12 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
             if result:
                print(result)
 
+def print_status_line(text):
+    clear_line = ' ' * term_width
+    sys.stdout.write(f'\r{clear_line}\r')
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
     urls_to_fuzz = []
 
@@ -159,6 +167,8 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         for future in as_completed(futures):
             url = futures[future]
             result = future.result()
+            print_status_line(f"\r[+] Fuzzing: {url}")
+            sys.stdout.flush()
             if result:
                 print(result)
                 if redirects_to_home_page(url, base_url, proxies):
