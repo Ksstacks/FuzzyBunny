@@ -23,10 +23,9 @@ banner = """
 """
 print(banner)
 
-
-def read_wordlist(file_path):
-    with open(file_path, "r") as file:
-        return [line.strip() for line in file.readlines()]
+def read_wordlist(filepath):
+    with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
+        return [line.strip() for line in file]
 
 def test_url(url, output_file, found_urls, excluded_codes, proxies=None, isvalid=False):
     try:
