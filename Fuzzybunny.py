@@ -39,7 +39,7 @@ def test_url(url, output_file, found_urls, excluded_codes, proxies=None, isvalid
             result = f" (Status Code: {status_code})"
             if output_file:
                 with open(output_file, "a") as f:
-                    f.write(f"{url} (Status Code: {status_code})")
+                    f.write(f"{url} (Status Code: {status_code})\n")
             return result
         elif status_code != 404 and url not in found_urls:
             isvalid = True
@@ -94,7 +94,7 @@ def print_status_line(text):
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
     urls_to_fuzz = []
-    if base_url.strip("https://") and base_url.find("/") == None:
+    if base_url.strip("https://") or base_url.strip("http://") and base_url.find("/") == None:
         base_url.endswith("/")
     if directories:
         for domain in domains:
