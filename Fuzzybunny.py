@@ -51,10 +51,20 @@ def test_url(url, output_file, found_urls, excluded_codes, proxies=None, isvalid
 
 def construct_url(subdomain, domain, directory=None, extension=None):
     # Construct the full URL based on provided directory and extension
+    if domain.startswith("https://"):
+        domain = domain[len("https://"):]
+    elif domain.startswith("http://"):
+        domain = domain[len("http://"):]
     if directory and extension:
         return f"{domain}/{directory}.{extension}"
     elif directory:
         return f"{domain}/{directory}"
+    elif subdomain:
+        return f"{subdomain}.{domain}"
+    elif subdomain and directory:
+        return f"{subdomain}.{domain}/{directory}"
+    elif subdomain and directory and extension:
+        return f"{subdomain}.{domain}/{directory}.{extension}"
     return domain
 
 def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10):
@@ -94,8 +104,6 @@ def print_status_line(text):
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
     urls_to_fuzz = []
-    if base_url.strip("https://") or base_url.strip("http://") and base_url.find("/") == None:
-        base_url.endswith("/")
     if directories:
         for domain in domains:
             for subdomain in subdomains:
@@ -154,7 +162,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
-            print_status_line(f"\r{url}")
+            print_status_line(f"\rhttps://{url}")
             sys.stdout.flush()
             result = future.result()
             if result:
