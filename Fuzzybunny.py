@@ -9,7 +9,7 @@ import shutil
 
 # Initialize colorama
 init(autoreset=True)
-term_width = shutil.get_terminal_size((80, 20)).columns
+term_width = shutil.get_terminal_size((100, 100)).columns
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -56,9 +56,9 @@ def construct_url(subdomain, domain, directory=None, extension=None):
     elif domain.startswith("http://"):
         domain = domain[len("http://"):]
     if directory and extension:
-        return f"{domain}{directory}.{extension}"
+        return f"{domain}/{directory}.{extension}"
     elif directory:
-        return f"{domain}{directory}"
+        return f"{domain}/{directory}"
     elif subdomain:
         return f"{subdomain}.{domain}"
     elif subdomain and directory:
@@ -89,7 +89,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
-            curled = subprocess.run(f"curl -s {url}").stdout
+            curled = os.run(f"curl -s {url}").stdout
             if curled.strip() == home_page_content.strip() and url != futures:
                 print(f"Skipping URL {url} as it redirects to the home page.")
                 continue
@@ -162,14 +162,14 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
-            print_status_line(f"\rhttps://{url}")
+            print_status_line(f"\rhttps://{url}\r")
             sys.stdout.flush()
             result = future.result()
             if result:
                 print(f"{result}")
     for directory in found_directories:
         fuzz_recursive(directory, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
-
+        print_status_line(f"\rhttps://{url}\r")
 def main():
     parser = argparse.ArgumentParser(
         description="Fuzzer for enumeration and fuzzing with extensions and subdomains.",
