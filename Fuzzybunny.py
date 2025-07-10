@@ -186,7 +186,7 @@ def main():
     parser.add_argument("-x", "--exclude", nargs="*", default=[], help="Status codes to exclude from results (e.g., 404 500).")
     args = parser.parse_args()
 
-    if not args.url.startswith(("https://", "https://")):
+    if not args.url.startswith(("https://", "http://")):
         parser.error("Must start with http:// or https://")
         exit()
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ["www"]
