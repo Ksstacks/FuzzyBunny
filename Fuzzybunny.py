@@ -56,9 +56,9 @@ def construct_url(subdomain, domain, directory=None, extension=None):
     elif domain.startswith("http://"):
         domain = domain[len("http://"):]
     if directory and extension:
-        return f"{domain}/{directory}.{extension}"
+        return f"{domain}{directory}.{extension}"
     elif directory:
-        return f"{domain}/{directory}"
+        return f"{domain}{directory}"
     elif subdomain:
         return f"{subdomain}.{domain}"
     elif subdomain and directory:
