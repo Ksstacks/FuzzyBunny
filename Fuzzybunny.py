@@ -9,7 +9,7 @@ import shutil
 
 # Initialize colorama
 init(autoreset=True)
-term_width = shutil.get_terminal_size((100, 100)).columns
+term_width = shutil.get_terminal_size((100, 50)).columns
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -51,10 +51,11 @@ def test_url(url, output_file, found_urls, excluded_codes, proxies=None, isvalid
 
 def construct_url(subdomain, domain, directory=None, extension=None):
     # Construct the full URL based on provided directory and extension
-    if domain.startswith("https://"):
-        domain = domain[len("https://"):]
-    elif domain.startswith("http://"):
-        domain = domain[len("http://"):]
+    if subdomain:
+        if domain.startswith("https://"):
+            domain = domain[len("https://"):]
+        elif domain.startswith("http://"):
+            domain = domain[len("http://"):]
     if directory and extension:
         return f"{domain}/{directory}.{extension}"
     elif directory:
@@ -162,14 +163,14 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
-            print_status_line(f"\rhttps://{url}\r")
+            print_status_line(f"\r{url}")
             sys.stdout.flush()
             result = future.result()
             if result:
                 print(f"{result}")
     for directory in found_directories:
         fuzz_recursive(directory, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
-        print_status_line(f"\rhttps://{url}\r")
+        print_status_line(f"\r{url}")
 def main():
     parser = argparse.ArgumentParser(
         description="Fuzzer for enumeration and fuzzing with extensions and subdomains.",
@@ -194,7 +195,7 @@ def main():
     extensions = read_wordlist(args.extensions) if args.extensions else None
     domains = read_wordlist(args.domains) if args.domains else [args.url]
     output_file = args.output
-    base_url = args.url.rstrip("/")
+    base_url = args.url
     max_depth = args.recursive
     proxy = args.proxy
     threads = args.threads
