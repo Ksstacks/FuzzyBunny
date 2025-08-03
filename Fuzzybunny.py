@@ -89,7 +89,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                     continue
                 result = future.result()
                 if result:
-                    print("\r" + " " * term_width + "\r", end="")
+                    print_status_line("")
                     print(f"[+] {result}")
                     fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers)
             except Exception as e:
