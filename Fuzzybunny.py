@@ -117,7 +117,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         for future in as_completed(futures):
             result = future.result()
             if result:
-                print("\r" + " " * term_width + "\r", end="")
+                print_status_line("")
                 print(f"[+] {result}")
                 fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
 
