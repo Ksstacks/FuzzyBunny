@@ -3,12 +3,23 @@ import argparse
 import requests
 import sys
 import os
-from colorama import init
+import subprocess
+from colorama import Fore, Style, init
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import shutil
+import threading
 
+# Initialize colorama
 init(autoreset=True)
 term_width = shutil.get_terminal_size((100, 50)).columns
+print_lock = threading.Lock()
+
+def print_status_line(text):
+    with print_lock:
+        clear_line = " " * term_width
+        sys.stdout.write(f"\r{clear_line}\r")
+        sys.stdout.write(text)
+        sys.stdout.flush()
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -22,29 +33,25 @@ banner = """
 """
 print(banner)
 
-def print_status_line(text):
-    clear_line = " " * term_width
-    sys.stdout.write(f"\r{clear_line}\r")
-    sys.stdout.write(text)
-    sys.stdout.flush()
-
 def read_wordlist(filepath):
     with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
-        return [line.strip() for line in file if line.strip()]
+        return [line.strip() for line in file]
 
-def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None):
+def test_url(url, output_file, found_urls, excluded_codes, proxies=None):
     try:
-        response = session.get(url, timeout=3, proxies=proxies)
+        print_status_line(f"Currently fuzzing: {url}")
+        response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code in excluded_codes:
             return None
-        if home_page_content is not None and response.text.strip() == home_page_content:
-            return None
-        if url not in found_urls:
+        if status_code == 200 and url not in found_urls:
             found_urls.add(url)
             if output_file:
                 with open(output_file, "a") as f:
                     f.write(f"{url} (Status Code: {status_code})\n")
+            return f"{url} (Status Code: {status_code})"
+        elif status_code != 404 and url not in found_urls:
+            found_urls.add(url)
             return f"{url} (Status Code: {status_code})"
     except requests.RequestException:
         pass
@@ -63,31 +70,36 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
             else:
                 urls_to_fuzz.append(f"{base_url.rstrip('/')}/{directory}")
 
-    session = requests.Session()
-
     try:
-        home_page_response = session.get(base_url, timeout=3, proxies=proxies)
-        home_page_content = home_page_response.text.strip()
-    except Exception:
+        home_page_content = subprocess.run(["curl", "-s", base_url], capture_output=True, text=True).stdout.strip()
+    except Exception as e:
+        print(f"Error fetching base page: {e}")
         return
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, home_page_content): url for url in urls_to_fuzz}
+        futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
-            print_status_line(f"Currently fuzzing: {url}")
             try:
+                curled = subprocess.run(["curl", "-s", url], capture_output=True, text=True).stdout.strip()
+                if curled == home_page_content:
+                    print_status_line(f"Currently fuzzing: {url}")
+                    print(f"\n[!] Skipping {url} — redirects to home page")
+                    continue
                 result = future.result()
                 if result:
-                    print_status_line("")  # Clear status line before printing found URL
+                    print("\r" + " " * term_width + "\r", end="")
                     print(f"[+] {result}")
                     fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers)
-            except Exception:
-                continue
-    print_status_line("Recursive fuzzing complete.")
+            except Exception as e:
+                print(f"[!] Error processing {url}: {e}")
+
+    if current_depth == max_depth:
+        fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
     urls_to_fuzz = set()
+
     for domain in domains:
         for subdomain in subdomains:
             base = f"{subdomain}.{domain}" if subdomain != "www" else domain
@@ -99,25 +111,14 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                     urls_to_fuzz.add(f"http://{base}/{directory}")
             urls_to_fuzz.add(f"http://{base}")
 
-    session = requests.Session()
-
-    try:
-        home_page_response = session.get(base_url, timeout=3, proxies=proxies)
-        home_page_content = home_page_response.text.strip()
-    except Exception:
-        home_page_content = None
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, home_page_content): url for url in urls_to_fuzz}
+        futures = {executor.submit(test_url, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
         for future in as_completed(futures):
-            url = futures[future]
-            print_status_line(f"Currently fuzzing: {url}")
             result = future.result()
             if result:
-                print_status_line("")  # Clear status line before printing found URL
+                print("\r" + " " * term_width + "\r", end="")
                 print(f"[+] {result}")
                 fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
-    print_status_line("Fuzzing complete.")
 
 def main():
     parser = argparse.ArgumentParser(description="Fuzzer for enumeration and fuzzing with extensions and subdomains.")
@@ -145,7 +146,7 @@ def main():
     max_depth = args.recursive
     proxy = args.proxy
     threads = args.threads
-    excluded_codes = set(map(int, args.exclude)) if args.exclude else set()
+    excluded_codes = set(map(int, args.exclude))
     proxies = {"http": proxy, "https": proxy} if proxy else None
 
     if output_file and os.path.exists(output_file):
