@@ -84,6 +84,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                 curled = subprocess.run(["curl", "-s", url], capture_output=True, text=True).stdout.strip()
                 if curled == home_page_content:
                     print_status_line(f"Currently fuzzing: {url}")
+                    print_status_line("")
                     print(f"\n[!] Skipping {url} — redirects to home page")
                     continue
                 result = future.result()
