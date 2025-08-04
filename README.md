@@ -1,7 +1,7 @@
 # FuzzyBunny
 A url fuzzer that will search recursively to find directorys and can be used to fuzz subdomains too. Also if your looking to find domains it also fuzzes those too!
 
-STILL UNDER DEVELOPMENT. MIGHT NOT BE FULLY FUCTIONAL YET.
+STILL UNDER DEVELOPMENT. MIGHT HAVE BUGS.
 
 ![fuzzybunny](https://github.com/user-attachments/assets/1525782e-088b-4294-ae5e-4bfc89aedd17)
 
