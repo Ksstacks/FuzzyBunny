@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import shutil
 import threading
 
+# Initialize colorama
 init(autoreset=True)
 term_width = shutil.get_terminal_size((100, 50)).columns
 print_lock = threading.Lock()
@@ -95,7 +96,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
             except Exception as e:
                 print(f"[!] Error processing {url}: {e}")
                 continue
-    print_status_line("Recursive fuzzing complete for this directory.")
+    print("Recursive fuzzing complete for this directory.")
 
     if current_depth == max_depth and base_url != origin_base:
         fuzz_recursive(origin_base, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
@@ -132,7 +133,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                 print_status_line("")
                 print(f"[+] {result}")
                 fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
-    print_status_line("Fuzzing complete.")
+    print("Fuzzing complete.")
 
 def main():
     parser = argparse.ArgumentParser(description="Fuzzer for enumeration and fuzzing with extensions and subdomains.")
