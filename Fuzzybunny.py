@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import shutil
 import threading
 
-# Initialize colorama
 init(autoreset=True)
 term_width = shutil.get_terminal_size((100, 50)).columns
 print_lock = threading.Lock()
