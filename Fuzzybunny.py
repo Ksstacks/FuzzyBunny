@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import argparse
+from urllib.parse import urlparse
 import requests
 import sys
 import os
@@ -20,6 +21,18 @@ def print_status_line(text):
         sys.stdout.write(f"\r{' ' * term_width}\r")
         sys.stdout.write(text)
         sys.stdout.flush()
+
+def validate_url(url):
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        sys.exit(f"[!] Invalid URL format: {url}")
+
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code >= 400:
+            sys.exit(f"[!] URL responded with error code {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        sys.exit(f"[!] Could not connect to {url} — {e}")
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
@@ -151,8 +164,10 @@ def main():
 
     if not args.url.startswith(("http://", "https://")):
         parser.error("URL must start with http:// or https://")
-    elif args.subdomains == True and args.recursive == True:
-        parser.error("There is no recursive searching with subdomains.")
+    if args.recursive and int(args.recursive) > 1 and args.subdomains is not None:
+        sys.exit("[!] Recursive searching with subdomains is not supported.")
+
+    validate_url(args.url)
 
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ["www"]
     directories = read_wordlist(args.directories) if args.directories else None
