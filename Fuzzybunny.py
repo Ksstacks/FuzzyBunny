@@ -109,6 +109,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
             except Exception as e:
                 print(f"[!] Error processing {url}: {e}")
                 continue
+    print_status_line("")
     print("Recursive fuzzing complete for this directory.")
 
     if current_depth == max_depth and base_url != origin_base:
@@ -146,6 +147,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                 print_status_line("")
                 print(f"[+] {result}")
                 fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
+    print_status_line("")
     print("Fuzzing complete.")
 
 def main():
