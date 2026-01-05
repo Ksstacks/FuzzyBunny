@@ -4,11 +4,13 @@ from urllib.parse import urlparse
 import requests
 import sys
 import os
-import subprocess
-from colorama import Fore, Style, init
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import shutil
 import threading
+import time
+import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from colorama import Fore, Style, init
 
 # Initialize colorama
 init(autoreset=True)
@@ -33,6 +35,19 @@ def validate_url(url):
             sys.exit(f"[!] URL responded with error code {response.status_code}")
     except requests.exceptions.RequestException as e:
         sys.exit(f"[!] Could not connect to {url} — {e}")
+
+# Disable retries
+adapter = HTTPAdapter(max_retries=0)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
+# Browser-like headers
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Connection": "close"
+})
 
 banner = """
   ░        ░░  ░░░░  ░░        ░░        ░░  ░░░░  ░░       ░░░  ░░░░  ░░   ░░░  ░░   ░░░  ░░  ░░░░  ░
