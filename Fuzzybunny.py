@@ -26,15 +26,27 @@ def print_status_line(text):
 
 def validate_url(url):
     parsed = urlparse(url)
+
     if not parsed.scheme or not parsed.netloc:
-        sys.exit(f"[!] Invalid URL format: {url}")
+        print(f"[!] Invalid URL format: {url}")
+        return False
 
     try:
         response = requests.get(url, timeout=5)
+
         if response.status_code >= 400:
-            sys.exit(f"[!] URL responded with error code {response.status_code}")
+            tocontinue = input(
+                f"[!] URL responded with error code {response.status_code}. Continue anyway? (y/n): "
+            ).lower()
+
+            if tocontinue == 'n':
+                return False
+
+        return True
+
     except requests.exceptions.RequestException as e:
-        sys.exit(f"[!] Could not connect to {url} — {e}")
+        print(f"[!] Could not connect to {url} — {e}")
+        return False
 
 # Disable retries
 adapter = HTTPAdapter(max_retries=0)
@@ -184,8 +196,6 @@ def main():
     if args.recursive and int(args.recursive) > 1 and args.subdomains is not None:
         sys.exit("[!] Recursive searching with subdomains is not supported.")
 
-    validate_url(args.url)
-
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ["www"]
     directories = read_wordlist(args.directories) if args.directories else None
     extensions = read_wordlist(args.extensions) if args.extensions else None
@@ -201,8 +211,11 @@ def main():
     if output_file and os.path.exists(output_file):
         os.remove(output_file)
 
+    validate_url(args.url)
     found_urls = set()
     fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies, threads)
+
+
 
 if __name__ == "__main__":
     main()
