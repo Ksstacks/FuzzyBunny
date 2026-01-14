@@ -118,17 +118,17 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         for subdomain in subdomains:
             if extensions:
                 for extension in extensions:
-                    urls_to_fuzz.append(f"https://{subdomain}.{clean_base}.{extension}")
+                    urls_to_fuzz.append(f"http://{subdomain}.{clean_base}.{extension}")
             else:
-                urls_to_fuzz.append(f"https://{subdomain}.{clean_base}")
+                urls_to_fuzz.append(f"http://{subdomain}.{clean_base}")
 
     if directories:
         for directory in directories:
             if extensions:
                 for extension in extensions:
-                    urls_to_fuzz.append(f"https://{clean_base}/{directory}.{extension}")
+                    urls_to_fuzz.append(f"http://{clean_base}/{directory}.{extension}")
             else:
-                urls_to_fuzz.append(f"https://{clean_base}/{directory}")
+                urls_to_fuzz.append(f"http://{clean_base}/{directory}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -168,11 +168,11 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             parsed = urlparse(base)
             clean_base = parsed.netloc or parsed.path
 
-            urls_to_fuzz.append(f"https://{clean_base}")
+            urls_to_fuzz.append(f"http://{clean_base}")
 
             if directories:
                 for directory in directories:
-                    urls_to_fuzz.append(f"https://{clean_base}/{directory}")
+                    urls_to_fuzz.append(f"http://{clean_base}/{directory}")
 
                     if extensions:
                         for extension in extensions:
