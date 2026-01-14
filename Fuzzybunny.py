@@ -18,6 +18,15 @@ term_width = shutil.get_terminal_size((100, 50)).columns
 print_lock = threading.Lock()
 session = requests.Session()
 
+def normalize_domain(value: str) -> str:
+    value = value.strip()
+    parsed = urlparse(value)
+    return parsed.netloc or parsed.path
+
+def clean_domain(d):
+    parsed = urlparse(d.strip())
+    return parsed.netloc or parsed.path
+
 def print_status_line(text):
     with print_lock:
         sys.stdout.write(f"\r{' ' * term_width}\r")
@@ -30,20 +39,15 @@ def validate_url(url):
     if not parsed.scheme or not parsed.netloc:
         print(f"[!] Invalid URL format: {url}")
         return False
-
     try:
         response = requests.get(url, timeout=5)
-
         if response.status_code >= 400:
             tocontinue = input(
                 f"[!] URL responded with error code {response.status_code}. Continue anyway? (y/n): "
             ).lower()
-
             if tocontinue == 'n':
                 return False
-
         return True
-
     except requests.exceptions.RequestException as e:
         print(f"[!] Could not connect to {url} — {e}")
         return False
@@ -110,14 +114,6 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
     parsed = urlparse(base_url)
     clean_base = parsed.netloc or parsed.path
 
-    if directories:
-        for directory in directories:
-            if extensions:
-                for extension in extensions:
-                    urls_to_fuzz.append(f"{base_url.rstrip('/')}/{directory}.{extension}")
-            else:
-                urls_to_fuzz.append(f"{base_url.rstrip('/')}/{directory}")
-
     if subdomains:
         for subdomain in subdomains:
             if extensions:
@@ -125,6 +121,14 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                     urls_to_fuzz.append(f"http://{subdomain}.{clean_base}.{extension}")
             else:
                 urls_to_fuzz.append(f"http://{subdomain}.{clean_base}")
+
+    if directories:
+        for directory in directories:
+            if extensions:
+                for extension in extensions:
+                    urls_to_fuzz.append(f"http://{clean_base}/{directory}.{extension}")
+            else:
+                urls_to_fuzz.append(f"http://{clean_base}/{directory}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -156,18 +160,23 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         fuzz_recursive(origin_base, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
-    urls_to_fuzz = set()
+    urls_to_fuzz = []
 
     for domain in domains:
         for subdomain in subdomains:
             base = f"{subdomain}.{domain}" if subdomain != "www" else domain
+            parsed = urlparse(base)
+            clean_base = parsed.netloc or parsed.path
+
+            urls_to_fuzz.append(f"http://{clean_base}")
+
             if directories:
                 for directory in directories:
+                    urls_to_fuzz.append(f"http://{clean_base}/{directory}")
+
                     if extensions:
                         for extension in extensions:
-                            urls_to_fuzz.add(f"http://{base}/{directory}.{extension}")
-                    urls_to_fuzz.add(f"http://{base}/{directory}")
-            urls_to_fuzz.add(f"http://{base}")
+                            urls_to_fuzz.append(f"http://{clean_base}/{directory}.{extension}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -192,7 +201,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
 
 def main():
     parser = argparse.ArgumentParser(description="Fuzzer for enumeration and fuzzing with extensions and subdomains.")
-    parser.add_argument("-u", "--url", required=True, help="Base URL for fuzzing. Must start with http:// or https://.")
+    parser.add_argument("-u", "--url", help="Base URL for fuzzing. Must start with http:// or https://.")
     parser.add_argument("-s", "--subdomains", help="Path to the subdomains wordlist.")
     parser.add_argument("-d", "--directories", help="Path to the directories wordlist.")
     parser.add_argument("-e", "--extensions", help="Path to the extensions wordlist.")
@@ -208,7 +217,8 @@ def main():
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ["www"]
     directories = read_wordlist(args.directories) if args.directories else None
     extensions = read_wordlist(args.extensions) if args.extensions else None
-    domains = read_wordlist(args.domains) if args.domains else [args.url.replace("http://", "").replace("https://", "").rstrip("/")]
+    domains = ([normalize_domain(d) for d in read_wordlist(args.domains)] if args.domains else [normalize_domain(args.url)])
+
     output_file = args.output
     base_url = args.url
     max_depth = args.recursive
