@@ -107,6 +107,9 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         origin_base = base_url
 
     urls_to_fuzz = []
+    parsed = urlparse(base_url)
+    clean_base = parsed.netloc or parsed.path
+
     if directories:
         for directory in directories:
             if extensions:
@@ -114,6 +117,14 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                     urls_to_fuzz.append(f"{base_url.rstrip('/')}/{directory}.{extension}")
             else:
                 urls_to_fuzz.append(f"{base_url.rstrip('/')}/{directory}")
+
+    if subdomains:
+        for subdomain in subdomains:
+            if extensions:
+                for extension in extensions:
+                    urls_to_fuzz.append(f"http://{subdomain}.{clean_base}.{extension}")
+            else:
+                urls_to_fuzz.append(f"http://{subdomain}.{clean_base}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -193,11 +204,6 @@ def main():
     parser.add_argument("-x", "--exclude", nargs="*", default=[], help="Status codes to exclude (e.g., 404 500).")
     parser.add_argument("--output-nocode", action="store_true", help="Output URLs without status codes")
     args = parser.parse_args()
-
-    if not args.url.startswith(("http://", "https://")):
-        parser.error("URL must start with http:// or https://")
-    if args.recursive and int(args.recursive) > 1 and args.subdomains is not None:
-        sys.exit("[!] Recursive searching with subdomains is not supported.")
 
     subdomains = read_wordlist(args.subdomains) if args.subdomains else ["www"]
     directories = read_wordlist(args.directories) if args.directories else None
