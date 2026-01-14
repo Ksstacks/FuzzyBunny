@@ -77,25 +77,27 @@ def read_wordlist(filepath):
     with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
         return [line.strip() for line in file]
 
-def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None):
+def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=False):
     try:
         print_status_line(f"Currently fuzzing: {url}")
         response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code in excluded_codes:
             return None
-        if status_code == 200 and url not in found_urls:
+        if url not in found_urls and status_code != 404:
             found_urls.add(url)
+            # Console output (ALWAYS include status code)
+            console_line = f"{url} (Status Code: {status_code})"
+            # File output (conditional)
+            file_line = url if output_nocode else console_line
             if output_file:
                 with open(output_file, "a") as f:
-                    f.write(f"{url} (Status Code: {status_code})\n")
-            return f"{url} (Status Code: {status_code})"
-        elif status_code != 404 and url not in found_urls:
-            found_urls.add(url)
-            return f"{url} (Status Code: {status_code})"
+                    f.write(file_line + "\n")
+            return console_line
     except requests.RequestException:
         pass
     return None
+
 
 def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None):
     if current_depth > max_depth:
@@ -142,7 +144,7 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
     if current_depth == max_depth and base_url != origin_base:
         fuzz_recursive(origin_base, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
 
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10):
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
     urls_to_fuzz = set()
 
     for domain in domains:
@@ -163,7 +165,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
         return
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies): url for url in urls_to_fuzz}
+        futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, output_nocode=output_nocode): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             result = future.result()
             if home_page_response == home_page_content:
@@ -189,6 +191,7 @@ def main():
     parser.add_argument("-p", "--proxy", help="Proxy URL (http://ip:port or socks5://ip:port).")
     parser.add_argument("-t", "--threads", type=int, default=10, help="Number of concurrent threads.")
     parser.add_argument("-x", "--exclude", nargs="*", default=[], help="Status codes to exclude (e.g., 404 500).")
+    parser.add_argument("--output-nocode", action="store_true", help="Output URLs without status codes")
     args = parser.parse_args()
 
     if not args.url.startswith(("http://", "https://")):
@@ -207,13 +210,14 @@ def main():
     threads = args.threads
     excluded_codes = set(map(int, args.exclude))
     proxies = {"http": proxy, "https": proxy, "socks5": proxy} if proxy else None
+    output_nocode = args.output_nocode
 
     if output_file and os.path.exists(output_file):
         os.remove(output_file)
 
     validate_url(args.url)
     found_urls = set()
-    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies, threads)
+    fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies, threads, output_nocode=output_nocode)
 
 
 
