@@ -81,7 +81,7 @@ def read_wordlist(filepath):
     with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
         return [line.strip() for line in file]
 
-def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=False):
+def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=None):
     try:
         print_status_line(f"Currently fuzzing: {url}")
         response = requests.get(url, timeout=3, proxies=proxies)
@@ -89,7 +89,7 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
         if status_code in excluded_codes:
             return None
         if url not in found_urls and status_code != 404:
-            found_urls.add(url)
+            found_urls.append(url)
             # Console output (ALWAYS include status code)
             console_line = f"{url} (Status Code: {status_code})"
             # File output (conditional)
@@ -118,17 +118,17 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         for subdomain in subdomains:
             if extensions:
                 for extension in extensions:
-                    urls_to_fuzz.append(f"http://{subdomain}.{clean_base}.{extension}")
+                    urls_to_fuzz.append(f"https://{subdomain}.{clean_base}.{extension}")
             else:
-                urls_to_fuzz.append(f"http://{subdomain}.{clean_base}")
+                urls_to_fuzz.append(f"https://{subdomain}.{clean_base}")
 
     if directories:
         for directory in directories:
             if extensions:
                 for extension in extensions:
-                    urls_to_fuzz.append(f"http://{clean_base}/{directory}.{extension}")
+                    urls_to_fuzz.append(f"https://{clean_base}/{directory}.{extension}")
             else:
-                urls_to_fuzz.append(f"http://{clean_base}/{directory}")
+                urls_to_fuzz.append(f"https://{clean_base}/{directory}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -168,11 +168,11 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             parsed = urlparse(base)
             clean_base = parsed.netloc or parsed.path
 
-            urls_to_fuzz.append(f"http://{clean_base}")
+            urls_to_fuzz.append(f"https://{clean_base}")
 
             if directories:
                 for directory in directories:
-                    urls_to_fuzz.append(f"http://{clean_base}/{directory}")
+                    urls_to_fuzz.append(f"https://{clean_base}/{directory}")
 
                     if extensions:
                         for extension in extensions:
@@ -195,7 +195,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
             elif result:
                 print_status_line("")
                 print(f"[+] {result}")
-                fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
+                fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth + 1, proxies, max_workers)
     print_status_line("")
     print("Fuzzing complete.")
 
@@ -232,7 +232,7 @@ def main():
         os.remove(output_file)
 
     validate_url(args.url)
-    found_urls = set()
+    found_urls = []
     fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies, threads, output_nocode=output_nocode)
 
 
