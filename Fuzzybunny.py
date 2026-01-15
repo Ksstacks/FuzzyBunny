@@ -46,7 +46,7 @@ def validate_url(url):
                 f"[!] URL responded with error code {response.status_code}. Continue anyway? (y/n): "
             ).lower()
             if tocontinue == 'n':
-                return False
+                exit()
         return True
     except requests.exceptions.RequestException as e:
         print(f"[!] Could not connect to {url} — {e}")
@@ -83,7 +83,8 @@ def read_wordlist(filepath):
 
 def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=None):
     try:
-        print_status_line(f"Currently fuzzing: {url}")
+        #print_status_line(f"Currently fuzzing: {url}")
+        print(f"{url}")
         response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code in excluded_codes:
@@ -103,7 +104,7 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
     return None
 
 
-def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None):
+def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None, output_nocode=None):
     if current_depth > max_depth:
         return
 
@@ -193,7 +194,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                 print(f"[!] Skipping {url} — redirects to home page")
                 continue            
             elif result:
-                print_status_line("")
+                #print_status_line("")
                 print(f"[+] {result}")
                 fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth + 1, proxies, max_workers)
     print_status_line("")
