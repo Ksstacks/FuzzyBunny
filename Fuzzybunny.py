@@ -148,8 +148,10 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, home_page_content, home_page_response, output_nocode=output_nocode): url for url in urls_to_fuzz}
         for future in as_completed(futures):
-            url = futures[future]
+            submitted_url = futures[future]
             result = future.result()
+            if not result:
+                continue
             url, status = result
             try:
                 if home_page_response == home_page_content:
@@ -170,6 +172,9 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
+
+    if not isinstance(base_url, str):
+        raise TypeError(f"BUG: base_url must be str, got {type(base_url)}")
 
     if subdomains != "www" and directories:
         fatal("Cannot fuzz both subdomains and directories.")
