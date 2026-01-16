@@ -43,9 +43,18 @@ banner = """
 """
 print(banner)
 
+
+def strip_scheme(url: str) -> str:
+    parsed = urlparse(url)
+    return parsed.netloc or parsed.path
+
 def fatal(msg, code=1):
     print(f"[!] Error: {msg}", file=sys.stderr)
     sys.exit(code)
+
+def extract_host(url: str) -> str:
+    parsed = urlparse(url)
+    return parsed.netloc
 
 def normalize_domain(value: str) -> str:
     value = value.strip()
@@ -82,6 +91,7 @@ def read_wordlist(filepath):
 def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=None):
     try:
         print_status_line(f"Currently fuzzing: {url}")
+        #print(url)
         response = requests.get(url, timeout=3, proxies=proxies)
         status_code = response.status_code
         if status_code in excluded_codes:
@@ -95,13 +105,14 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
             if output_file:
                 with open(output_file, "a") as f:
                     f.write(file_line + "\n")
-            return url
+            return url, status_code
     except requests.RequestException:
         pass
     return None
 
 
 def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None, output_nocode=None):
+    
     if current_depth > max_depth:
         return
 
@@ -116,9 +127,15 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                     urls_to_fuzz.add(f"{base_url.rstrip('/')}/{directory}.{extension}")
             else:
                 urls_to_fuzz.add(f"{base_url.rstrip('/')}/{directory}")
-    if subdomains:
+
+    if current_depth == 1 and subdomains:
+        host = extract_host(base_url)
         for subdomain in subdomains:
-            urls_to_fuzz.add(f"{subdomain}.{base_url}")        
+            urls_to_fuzz.add(f"http://{subdomain}.{host}")
+
+    if subdomains and current_depth > 1:
+        for subdomain in subdomains:
+                urls_to_fuzz.add(f"{subdomain}.{base_url}")
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
@@ -138,8 +155,8 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                 result = future.result()
                 if result:
                     print_status_line("")
-                    print(f"[+] {result}")
-                    fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base)
+                    print(f"[+] {url}")
+                    fuzz_recursive(result, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base)
             except Exception as e:
                 print(f"[!] Error processing {url}: {e}")
                 continue
@@ -147,43 +164,51 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
     print("Recursive fuzzing complete for this directory.")
 
     if current_depth == max_depth and base_url != origin_base:
-        fuzz_recursive(result, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
+        fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
-    urls_to_fuzz = set()
 
-    if subdomains != "www":
-        for subdomain in subdomains:
-            base_url = f"{subdomain}.{domains}" if subdomain != 'www' else domains
-            urls_to_fuzz.add(f"{base_url}")
-    if directories:
-        for directory in directories:
-            urls_to_fuzz.add(f"{domains}/{directory}")
-            if extensions:
-                for extension in extensions:
-                        urls_to_fuzz.add(f"{domains}/{directory}.{extension}")
     if subdomains != "www" and directories:
-        fatal("Cannot fuzz both subdomains and directories.")            
+        fatal("Cannot fuzz both subdomains and directories.")
 
+    for domain in domains:
+        print_status_line("")
+        print(f"\n[*] Fuzzing domain: {domain}")
 
-    try:
-        home_page_response = session.get(base_url, timeout=3, proxies=proxies)
-        home_page_content = home_page_response.text.strip()
-    except Exception:
-        return
+        urls_to_fuzz = set()
+        base_domain_url = f"http://{domain}"
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, output_nocode=output_nocode): url for url in urls_to_fuzz}
-        for future in as_completed(futures):
-            result = future.result()
-            if home_page_response == home_page_content:
+        if subdomains != "www":
+            for subdomain in subdomains:
+                urls_to_fuzz.add(f"http://{subdomain}.{domain}")
+        else:
+            urls_to_fuzz.add(base_domain_url)
+
+        if directories:
+            for directory in directories:
+                dir_url = f"{base_domain_url}/{directory}"
+                urls_to_fuzz.add(dir_url)
+
+                if extensions:
+                    for extension in extensions:
+                        urls_to_fuzz.add(f"{dir_url}.{extension}")
+        try:
+            home_page_response = session.get(base_domain_url, timeout=3, proxies=proxies)
+            home_page_content = home_page_response.text.strip()
+        except Exception:
+            continue
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, output_nocode=output_nocode): url for url in urls_to_fuzz}
+            for future in as_completed(futures):
+                result = future.result()
+                if not result:
+                    continue
+                url, status = result
                 print_status_line("")
-                print(f"[!] Skipping {url} — redirects to home page")
-                continue            
-            elif result:
-                print_status_line("")
-                print(f"[+] {result}")
-                fuzz_recursive(result.split()[0], directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth + 1, proxies, max_workers)
+                print(f"[+] {url} (Status Code: {status})")
+                fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
+
     print_status_line("")
     print("Fuzzing complete.")
 
