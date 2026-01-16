@@ -112,7 +112,9 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
 
 
 def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None, output_nocode=None):
-    
+    if not isinstance(base_url, str):
+        raise TypeError(f"BUG: base_url must be str, got {type(base_url)}")
+
     if current_depth > max_depth:
         return
 
@@ -124,9 +126,9 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         for directory in directories:
             if extensions:
                 for extension in extensions:
-                    urls_to_fuzz.add(f"{base_url.rstrip('/')}/{directory}.{extension}")
+                    urls_to_fuzz.add(f"{str(base_url.rstrip('/'))}/{directory}.{extension}")
             else:
-                urls_to_fuzz.add(f"{base_url.rstrip('/')}/{directory}")
+                urls_to_fuzz.add(f"{str(base_url.rstrip('/'))}/{directory}")
 
     if current_depth == 1 and subdomains:
         host = extract_host(base_url)
@@ -147,16 +149,17 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         futures = {executor.submit(test_url, session, url, output_file, found_urls, excluded_codes, proxies, home_page_content, home_page_response, output_nocode=output_nocode): url for url in urls_to_fuzz}
         for future in as_completed(futures):
             url = futures[future]
+            result = future.result()
+            url, status = result
             try:
                 if home_page_response == home_page_content:
                     print_status_line("")
                     print(f"[!] Skipping {url} — redirects to home page")
                     continue
-                result = future.result()
                 if result:
                     print_status_line("")
-                    print(f"[+] {url}")
-                    fuzz_recursive(result, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base)
+                    print(f"[+] {url} (Status Code: {status})")
+                    fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base)
             except Exception as e:
                 print(f"[!] Error processing {url}: {e}")
                 continue
