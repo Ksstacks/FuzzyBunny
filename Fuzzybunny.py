@@ -151,18 +151,20 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
     urls_to_fuzz = set()
+
     if subdomains != "www":
         for subdomain in subdomains:
             base_url = f"{subdomain}.{domains}" if subdomain != 'www' else domains
             urls_to_fuzz.add(f"{base_url}")
     if directories:
         for directory in directories:
-            urls_to_fuzz.add(f"{base_url}/{directory}")
+            urls_to_fuzz.add(f"{domains}/{directory}")
             if extensions:
                 for extension in extensions:
-                        urls_to_fuzz.add(f"{base_url}/{directory}.{extension}")
+                        urls_to_fuzz.add(f"{domains}/{directory}.{extension}")
     if subdomains != "www" and directories:
         fatal("Cannot fuzz both subdomains and directories.")            
+
 
     try:
         home_page_response = session.get(base_url, timeout=3, proxies=proxies)
