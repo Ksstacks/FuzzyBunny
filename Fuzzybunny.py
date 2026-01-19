@@ -101,10 +101,14 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
             # Console output (ALWAYS include status code)
             console_line = f"{url} (Status Code: {status_code})"
             # File output (conditional)
-            file_line = url if output_nocode else console_line
+            if output_nocode:
+                console_line = f"{url}"
+            else:
+                console_line = f"{url} (Status Code: {status_code})"
+
             if output_file:
                 with open(output_file, "a") as f:
-                    f.write(file_line + "\n")
+                    f.write(console_line + "\n")
             return url, status_code
     except requests.RequestException:
         pass
@@ -116,8 +120,6 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
         raise TypeError(f"BUG: base_url must be str, got {type(base_url)}")
 
     if current_depth > max_depth:
-        print_status_line("")
-        print("Recursive fuzzing complete for this directory.")
         return
 
     if origin_base is None:
@@ -163,15 +165,15 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
                 if result:
                     print_status_line("")
                     print(f"[+] {url} (Status Code: {status})")
-                    fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base)
+                    fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth + 1, max_depth, proxies, max_workers, origin_base, output_nocode=output_nocode)
             except Exception as e:
                 print(f"[!] Error processing {url}: {e}")
                 continue
     print_status_line("")
     print("Recursive fuzzing complete for this directory.")
 
-    if current_depth >= max_depth and base_url != origin_base:
-        fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
+    if current_depth > max_depth and base_url != origin_base:
+        fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base, output_nocode)
 
 def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=False):
 
@@ -217,7 +219,7 @@ def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_u
                 url, status = result
                 print_status_line("")
                 print(f"[+] {url} (Status Code: {status})")
-                fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers)
+                fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, output_nocode=output_nocode)
 
     print_status_line("")
     print("Fuzzing complete.")
@@ -263,6 +265,7 @@ def main():
     excluded_codes = set(map(int, args.exclude))
     proxies = {"http": proxy, "https": proxy, "socks5": proxy} if proxy else None
     output_nocode = args.output_nocode
+
 
     if output_file and os.path.exists(output_file):
         os.remove(output_file)
