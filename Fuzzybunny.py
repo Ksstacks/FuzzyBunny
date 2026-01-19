@@ -88,7 +88,7 @@ def read_wordlist(filepath):
     with open(filepath, 'r', encoding='utf-8', errors='replace') as file:
         return [line.strip() for line in file]
 
-def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=None):
+def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None, home_page_content=None, home_page_response=None, print_status=True, output_nocode=False):
     try:
         print_status_line(f"Currently fuzzing: {url}")
         #print(url)
@@ -111,11 +111,13 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
     return None
 
 
-def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None, output_nocode=None):
+def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, current_depth, max_depth, proxies=None, max_workers=10, origin_base=None, output_nocode=False):
     if not isinstance(base_url, str):
         raise TypeError(f"BUG: base_url must be str, got {type(base_url)}")
 
     if current_depth > max_depth:
+        print_status_line("")
+        print("Recursive fuzzing complete for this directory.")
         return
 
     if origin_base is None:
@@ -168,10 +170,10 @@ def fuzz_recursive(base_url, directories, extensions, subdomains, output_file, f
     print_status_line("")
     print("Recursive fuzzing complete for this directory.")
 
-    if current_depth == max_depth and base_url != origin_base:
+    if current_depth >= max_depth and base_url != origin_base:
         fuzz_recursive(url, directories, extensions, subdomains, output_file, found_urls, excluded_codes, 1, max_depth, proxies, max_workers, origin_base)
 
-def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=None):
+def fuzz_urls(subdomains, directories, extensions, domains, output_file, found_urls, excluded_codes, base_url, max_depth, proxies=None, max_workers=10, output_nocode=False):
 
     if not isinstance(base_url, str):
         raise TypeError(f"BUG: base_url must be str, got {type(base_url)}")
