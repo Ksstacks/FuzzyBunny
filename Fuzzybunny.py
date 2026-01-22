@@ -242,10 +242,6 @@ def main():
     subdomains = read_wordlist(args.subdomains) if args.subdomains else "www"
     directories = read_wordlist(args.directories) if args.directories else None
     extensions = read_wordlist(args.extensions) if args.extensions else None
-    domains = ([normalize_domain(d) for d in read_wordlist(args.domains)] if args.domains else [normalize_domain(args.url)])
-    output_file = args.output
-    base_url = args.url
-
     if args.url:
         base_url = args.url.rstrip("/")
         validate_url(base_url)
@@ -255,9 +251,10 @@ def main():
         base_urls = [f"http://{d}" for d in domains]
         validate_url(base_urls[0])
         base_url = base_urls[0]
-
     else:
         fatal("You must provide either --url or --domains", 2)
+    domains = ([normalize_domain(d) for d in read_wordlist(args.domains)] if args.domains else [normalize_domain(args.url)])
+    output_file = args.output
 
     max_depth = args.recursive
     proxy = args.proxy
