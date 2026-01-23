@@ -74,7 +74,7 @@ def validate_url(url):
         print(f"[!] Invalid URL format: {url}")
         return False
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=5, verify=False)
         if response.status_code >= 400:
             tocontinue = input(f"[!] URL responded with error code {response.status_code}. Continue anyway? (y/n): ").lower()
             if tocontinue == 'n':
@@ -92,7 +92,7 @@ def test_url(session, url, output_file, found_urls, excluded_codes, proxies=None
     try:
         print_status_line(f"Currently fuzzing: {url}")
         #print(url)
-        response = requests.get(url, timeout=3, proxies=proxies)
+        response = requests.get(url, timeout=3, proxies=proxies, verify=False)
         status_code = response.status_code
         if status_code in excluded_codes:
             return None
