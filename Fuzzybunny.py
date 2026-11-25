@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import argparse
 from urllib.parse import urlparse
+import urllib3
 import requests
 import sys
 import os
@@ -22,6 +23,7 @@ session = requests.Session()
 adapter = HTTPAdapter(max_retries=0)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
+urllib3.disable_warnings()
 
 # Browser-like headers
 session.headers.update({
